@@ -2,16 +2,21 @@ package main
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
 
+	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/dustinxie/ecc"
@@ -176,4 +181,77 @@ func prettyPrintJson(encoded []byte) error {
 
 	fmt.Println(out.String())
 	return nil
+}
+
+type EncryptedBlob struct {
+	Version   int    `json:"version"`
+	KDF       string `json:"kdf"` // Argon2 Key Derivation Function
+	KDFParams struct {
+		Time      uint32 `json:"time"`
+		MemoryKiB uint32 `json:"memory_kib"`
+		Threads   uint8  `json:"threads"`
+		SaltB64   string `json:"salt_b64"`
+	} `json:"kdfparams"`
+
+	Cipher        string `json:"cipher"`    // AES block cipher
+	NonceB64      string `json:"nonce_b64"` // randomly generated nonce
+	CipherTextB64 string `json:"ciphertext_b64"`
+}
+
+// encryptWithPassword encrypts plain text bytes -> JSON(EncryptedBlob)
+func encryptWithPassword(plain, pass []byte) ([]byte, error) {
+	if len(pass) == 0 {
+		return nil, errors.New("empty password")
+	}
+
+	// Argon2 params (can tune)
+	time := uint32(2)
+	memoryKiB := uint32(64 * 1024) // 64 MiB
+	threads := uint8(1)
+
+	// Salt for Argon2
+	salt := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return nil, err
+	}
+
+	key := argon2.IDKey(pass, salt, time, memoryKiB, threads, 32) // AES-256 key
+	defer zero(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize()) // 12 bytes typically
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	additionalData := []byte("secp256k1-keyfile-v1")
+	ciphertext := gcm.Seal(nil, nonce, plain, additionalData)
+
+	var blob EncryptedBlob
+	blob.Version = 1
+	blob.KDF = "argon2id"
+	blob.Cipher = "aes-256-gcm"
+	blob.KDFParams.Time = time
+	blob.KDFParams.MemoryKiB = memoryKiB
+	blob.KDFParams.Threads = threads
+	blob.KDFParams.SaltB64 = base64.StdEncoding.EncodeToString(salt)
+	blob.NonceB64 = base64.StdEncoding.EncodeToString(nonce)
+	blob.CipherTextB64 = base64.StdEncoding.EncodeToString(ciphertext)
+
+	return json.Marshal(blob)
+}
+
+// Zeroes bytes
+func zero(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
 }
