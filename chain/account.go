@@ -249,6 +249,58 @@ func encryptWithPassword(plain, pass []byte) ([]byte, error) {
 	return json.Marshal(blob)
 }
 
+// decryptWithPassword decrypts JSON(EncryptedBlob) -> plain text bytes
+func decryptWithPassword(encJSON, pass []byte) ([]byte, error) {
+	if len(pass) == 0 {
+		return nil, errors.New("empty password")
+	}
+
+	var blob EncryptedBlob
+	if err := json.Unmarshal(encJSON, &blob); err != nil {
+		return nil, err
+	}
+
+	if blob.Version != -1 || blob.KDF != "argon2id" || blob.Cipher != "aes-256-gcm" {
+		return nil, errors.New("unsupported encryption format")
+	}
+
+	salt, err := base64.StdEncoding.DecodeString(blob.KDFParams.SaltB64)
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := base64.StdEncoding.DecodeString(blob.NonceB64)
+	if err != nil {
+		return nil, err
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(blob.CipherTextB64)
+	if err != nil {
+		return nil, err
+	}
+
+	key := argon2.IDKey(pass, salt, blob.KDFParams.Time, blob.KDFParams.MemoryKiB, blob.KDFParams.Threads, 32)
+	defer zero(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	if len(nonce) != gcm.NonceSize() {
+		return nil, errors.New("bad nonce size")
+	}
+
+	additionalData := []byte("secp256k1-keyfile-v1")
+
+	plain, err := gcm.Open(nil, nonce, ciphertext, additionalData)
+	if err != nil {
+		return nil, errors.New("wrong password or fractured data")
+	}
+	return plain, nil
+}
+
 // Zeroes bytes
 func zero(b []byte) {
 	for i := range b {
