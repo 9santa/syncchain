@@ -1,4 +1,4 @@
-package main
+package chain
 
 import (
 	"bytes"
@@ -98,6 +98,10 @@ func pad32(v *big.Int) []byte {
 type Account struct {
 	prv  *ecdsa.PrivateKey
 	addr Address
+}
+
+func (a Account) Address() Address {
+	return a.addr
 }
 
 func NewAccount() (Account, error) {
