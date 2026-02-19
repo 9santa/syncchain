@@ -1,0 +1,24 @@
+syntax = "proto3"
+
+option go_package = "./rpc"
+
+message AccountCreateReq {
+  required string Password = 1;
+}
+
+message AccountCreateRes {
+  required string Address = 1;
+}
+
+message AccountBalanceReq {
+  required string Address = 1;
+}
+
+message AccountBalanceRes {
+  required string Address = 1;
+}
+
+service Account {
+  rpc AccountCreate(AccountCreateReq) returns (AccountCreateRes);
+  rpc AccountBalance(AccountBalanceReq) returns (AccountBalanceRes);
+}
