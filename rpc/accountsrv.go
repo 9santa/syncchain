@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	"syncchain/chain"
 
 	"google.golang.org/grpc/codes"
@@ -40,17 +39,17 @@ func (s *AccountSrv) AccountCreate(ctx context.Context, req *AccountCreateReq) (
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-	res := &AccountCreateRes{Address: string(acc.Adress())}
+	res := &AccountCreateRes{Address: string(acc.Address())}
 	return res, nil
 }
 
 // Check the balance of the account address
 func (s *AccountSrv) AccountBalance(ctx context.Context, req *AccountBalanceReq) (*AccountBalanceRes, error) {
-	acc := req.Address
+	acc := chain.Address(req.Address)
 	balance, exists := s.balChecker.Balance(acc)
 	if !exists {
-		return nil, codes.NotFound, fmt.Sprintf("account %v does not exist or has not made any transaction yet", acc)
+		return nil, status.Errorf(codes.NotFound, "account %v does not exist or has not made any transaction yet", acc)
 	}
-	res := AccountBalanceRes{Balance: balance}
+	res := &AccountBalanceRes{Balance: balance}
 	return res, nil
 }
