@@ -33,11 +33,11 @@ func (s *AccountSrv) AccountCreate(ctx context.Context, req *AccountCreateReq) (
 	}
 	acc, err := chain.NewAccount()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	err = acc.WriteAccount(s.keyStoreDir, pass)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	res := &AccountCreateRes{Address: string(acc.Address())}
 	return res, nil
