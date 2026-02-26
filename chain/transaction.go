@@ -13,12 +13,17 @@ import (
 type Hash [32]byte
 
 // Constructor generates hash
-func NewHash(val any) Hash {
-	jval, _ := json.Marshal(val)
+func NewHash(val any) (Hash, error) {
+	jval, err := json.Marshal(val)
+	if err != nil {
+		return Hash{}, err
+	}
 	state := sha3.NewLegacyKeccak256()
 	_, _ = state.Write(jval)
-	hash := state.Sum(nil)
-	return Hash(hash)
+	sum := state.Sum(nil) // []byte len 32
+	var out Hash
+	copy(out[:], sum)
+	return out, nil
 }
 
 func (h Hash) String() string {
@@ -34,16 +39,30 @@ func (h Hash) MarshalText() ([]byte, error) {
 	return []byte(hex.EncodeToString(h[:])), nil
 }
 
-func (h Hash) UnmarshallText(hash []byte) error {
-	_, err := hex.Decode(h[:], hash)
+func (h Hash) UnmarshalText(hash []byte) error {
+	decoded := make([]byte, hex.DecodedLen(len(hash)))
+	n, err := hex.Decode(decoded, hash)
+	if err != nil {
+		return err
+	}
+	if n != 32 {
+		return fmt.Errorf("hash must be 32 bytes, got %d", n)
+	}
+	copy(h[:], hash[:])
 	return err
 }
 
 func DecodeHash(str string) (Hash, error) {
-	var hash Hash
-	bytes, err := hex.DecodeString(str)
-	hash = Hash(bytes)
-	return hash, err
+	b, err := hex.DecodeString(str)
+	if err != nil {
+		return Hash{}, err
+	}
+	if len(b) != 32 {
+		return Hash{}, fmt.Errorf("hash must be 32 bytes, got %d", len(b))
+	}
+	var h Hash
+	copy(h[:], b)
+	return h, nil
 }
 
 // Transaction struct
@@ -56,11 +75,12 @@ type Tx struct {
 }
 
 func NewTx(from, to Address, val, nonce uint64) Tx {
-	return Tx{From: from, To: to, Value: val, Nonce: nonce, Time: time.Now()}
+	return Tx{From: from, To: to, Value: val, Nonce: nonce, Time: time.Now().UTC()}
 }
 
 func (t Tx) Hash() Hash {
-	return NewHash(t)
+	h, _ := NewHash(t)
+	return h
 }
 
 // Signed Transaction type
@@ -75,7 +95,8 @@ func NewSigTx(tx Tx, sig []byte) SigTx {
 
 // Produces Keccak256 hash of a signed transaction
 func (t SigTx) Hash() Hash {
-	return NewHash(t)
+	h, _ := NewHash(t)
+	return h
 }
 
 func (t SigTx) String() string {
@@ -85,12 +106,15 @@ func (t SigTx) String() string {
 }
 
 // Pair hash is used for Merkle algorithms
-func TxPairHash(l, r Hash) Hash {
+func TxPairHash(l, r Hash) (Hash, error) {
 	var nilHash Hash
 	if r == nilHash {
-		return l
+		return l, nil
 	}
-	return NewHash(l.String() + r.String())
+	combined := make([]byte, 0, 64)
+	combined = append(combined, l[:]...)
+	combined = append(combined, r[:]...)
+	return NewHash(combined)
 }
 
 // Transaction signing process requires owner's password and is performed from the sender's account
