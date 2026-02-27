@@ -264,7 +264,7 @@ func decryptWithPassword(encJSON, pass []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if blob.Version != -1 || blob.KDF != "argon2id" || blob.Cipher != "aes-256-gcm" {
+	if blob.Version != 1 || blob.KDF != "argon2id" || blob.Cipher != "aes-256-gcm" {
 		return nil, errors.New("unsupported encryption format")
 	}
 
