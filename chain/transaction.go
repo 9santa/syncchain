@@ -39,7 +39,7 @@ func (h Hash) MarshalText() ([]byte, error) {
 	return []byte(hex.EncodeToString(h[:])), nil
 }
 
-func (h Hash) UnmarshalText(hash []byte) error {
+func (h *Hash) UnmarshalText(hash []byte) error {
 	decoded := make([]byte, hex.DecodedLen(len(hash)))
 	n, err := hex.Decode(decoded, hash)
 	if err != nil {
@@ -48,7 +48,7 @@ func (h Hash) UnmarshalText(hash []byte) error {
 	if n != 32 {
 		return fmt.Errorf("hash must be 32 bytes, got %d", n)
 	}
-	copy(h[:], hash[:])
+	copy(h[:], decoded[:])
 	return err
 }
 
